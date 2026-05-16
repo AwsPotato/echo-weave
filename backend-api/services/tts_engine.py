@@ -3,6 +3,7 @@ import json
 import os
 import logging
 import edge_tts
+from services.nlp_engine import detect_word_mood
 
 BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIO_CACHE_DIR: str = os.path.join(BASE_DIR, "audio_cache")
@@ -80,10 +81,13 @@ async def generate_audio(text: str, mood: str, weight: str) -> tuple[str, list[d
                 if chunk["type"] == "audio":
                     audio_data += chunk["data"]
                 elif chunk["type"] == "WordBoundary":
+                    word_mood, word_weight = detect_word_mood(chunk["text"], mood, weight)
                     word_timings.append({
                         "word": chunk["text"],
                         "offset": chunk["offset"] / 10_000_000,   # ticks -> seconds
                         "duration": chunk["duration"] / 10_000_000,
+                        "mood": word_mood,
+                        "weight": word_weight
                     })
 
             with open(filepath, "wb") as f:
@@ -99,5 +103,12 @@ async def generate_audio(text: str, mood: str, weight: str) -> tuple[str, list[d
         # Load cached timings
         with open(timings_filepath, "r", encoding="utf-8") as f:
             word_timings = json.load(f)
+            
+        # Retroactively add mood/weight if missing (for legacy cache)
+        if word_timings and "mood" not in word_timings[0]:
+            for wt in word_timings:
+                w_mood, w_weight = detect_word_mood(wt["word"], mood, weight)
+                wt["mood"] = w_mood
+                wt["weight"] = w_weight
 
     return (f"http://localhost:8000/static/{filename}", word_timings)

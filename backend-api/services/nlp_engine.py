@@ -313,3 +313,31 @@ def detect_mood(text: str, previous_mood: str = "neutral") -> Tuple[str, str]:
 
     weight: str = _determine_weight(max_score, caps_count, exclamation_count, amplifier_hits)
     return (best_mood, weight)
+
+def detect_word_mood(word: str, chunk_mood: str, chunk_weight: str) -> Tuple[str, str]:
+    """
+    Determines the specific mood and weight for an individual word.
+    Falls back to the chunk's mood and weight if the word itself doesn't strongly signal an emotion.
+    """
+    clean_word = re.sub(r'[^a-zA-Z0-9]', '', word.lower())
+    
+    if not clean_word:
+        return (chunk_mood, chunk_weight)
+
+    is_caps = word.isupper() and len(clean_word) >= 3
+    is_exclamation = "!" in word
+    is_amplifier = clean_word in INTENSITY_AMPLIFIERS
+
+    for mood, keywords in MOOD_KEYWORDS.items():
+        # Check if clean_word exactly matches any single-word keyword or is a substring of a multi-word keyword
+        # To be safe, just check exact match in the keywords list (which contains some single words)
+        # or if the word is part of a multi-word keyword
+        if clean_word in keywords or any(clean_word in kw.split() for kw in keywords):
+            weight = "high" if (is_caps or is_exclamation or is_amplifier) else "medium"
+            return (mood, weight)
+            
+    if is_amplifier or is_caps or is_exclamation:
+        return (chunk_mood, "high")
+        
+    return (chunk_mood, chunk_weight)
+

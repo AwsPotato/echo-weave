@@ -5,6 +5,8 @@ class WordTiming(BaseModel):
     word: str
     offset: float
     duration: float
+    mood: str = "neutral"
+    weight: str = "low"
 
 class ProcessTextChunk(BaseModel):
     text: str
