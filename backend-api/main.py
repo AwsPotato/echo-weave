@@ -37,17 +37,17 @@ async def process_text(request: ProcessTextRequest) -> ProcessTextResponse:
     chunks = split_text_into_chunks(request.text)
     
     # Phase 1: Sequential mood detection (depends on previous mood state)
-    chunk_moods: list[tuple[str, str]] = []
-    previous_mood = "neutral_narrative"
+    chunk_analysis: list[tuple[str, str, str]] = []  # (text, mood, weight)
+    previous_mood = "neutral"
     for chunk in chunks:
-        mood = detect_mood(chunk, previous_mood)
-        chunk_moods.append((chunk, mood))
+        mood, weight = detect_mood(chunk, previous_mood)
+        chunk_analysis.append((chunk, mood, weight))
         previous_mood = mood
     
     # Phase 2: Concurrent TTS generation via asyncio.gather
     start = time.perf_counter()
     
-    tasks = [generate_audio(text, mood) for text, mood in chunk_moods]
+    tasks = [generate_audio(text, mood, weight) for text, mood, weight in chunk_analysis]
     audio_urls: list[str] = await asyncio.gather(*tasks)
     
     elapsed = time.perf_counter() - start
@@ -56,11 +56,12 @@ async def process_text(request: ProcessTextRequest) -> ProcessTextResponse:
     # Phase 3: Assemble ordered response
     result_chunks = [
         ProcessTextChunk(
-            original_text=text,
+            text=text,
             mood=mood,
+            weight=weight,
             audio_url=audio_url
         )
-        for (text, mood), audio_url in zip(chunk_moods, audio_urls)
+        for (text, mood, weight), audio_url in zip(chunk_analysis, audio_urls)
     ]
         
     return ProcessTextResponse(chunks=result_chunks)

@@ -4,8 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import { Loader2, Play, AudioLines, Sparkles } from "lucide-react";
 
 interface ProcessTextChunk {
-  original_text: string;
+  text: string;
   mood: string;
+  weight: string;
   audio_url: string;
 }
 
@@ -81,17 +82,19 @@ export default function Home() {
 
   const getMoodStyles = (mood: string) => {
     switch (mood) {
-      case "ominous_suspense":
+      case "hype":
+        return "border-emerald-500/50 bg-emerald-950/20 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.1)] hover:border-emerald-400";
+      case "tense":
         return "border-indigo-500/50 bg-indigo-950/20 text-indigo-100 shadow-[0_0_15px_rgba(99,102,241,0.1)] hover:border-indigo-400";
-      case "high_action":
+      case "angry":
         return "border-rose-500/50 bg-rose-950/20 text-rose-100 shadow-[0_0_15px_rgba(244,63,94,0.1)] hover:border-rose-400";
-      case "analytical_inner":
-        return "border-cyan-500/50 bg-cyan-950/20 text-cyan-100 shadow-[0_0_15px_rgba(6,182,212,0.1)] hover:border-cyan-400";
-      case "awe_astonishment":
+      case "sad":
+        return "border-blue-500/50 bg-blue-950/20 text-blue-100 shadow-[0_0_15px_rgba(59,130,246,0.1)] hover:border-blue-400";
+      case "sarcastic":
         return "border-amber-500/50 bg-amber-950/20 text-amber-100 shadow-[0_0_15px_rgba(245,158,11,0.1)] hover:border-amber-400";
-      case "grim_savage":
-        return "border-orange-700/50 bg-orange-950/30 text-orange-100 shadow-[0_0_15px_rgba(194,65,12,0.1)] hover:border-orange-500";
-      case "neutral_narrative":
+      case "thoughtful":
+        return "border-cyan-500/50 bg-cyan-950/20 text-cyan-100 shadow-[0_0_15px_rgba(6,182,212,0.1)] hover:border-cyan-400";
+      case "neutral":
       default:
         return "border-slate-700 bg-slate-800/50 text-slate-200 hover:border-slate-500";
     }
@@ -99,19 +102,33 @@ export default function Home() {
 
   const getMoodBadge = (mood: string) => {
     switch (mood) {
-      case "ominous_suspense":
+      case "hype":
+        return "bg-emerald-900/50 text-emerald-300 border-emerald-700/50";
+      case "tense":
         return "bg-indigo-900/50 text-indigo-300 border-indigo-700/50";
-      case "high_action":
+      case "angry":
         return "bg-rose-900/50 text-rose-300 border-rose-700/50";
-      case "analytical_inner":
-        return "bg-cyan-900/50 text-cyan-300 border-cyan-700/50";
-      case "awe_astonishment":
+      case "sad":
+        return "bg-blue-900/50 text-blue-300 border-blue-700/50";
+      case "sarcastic":
         return "bg-amber-900/50 text-amber-300 border-amber-700/50";
-      case "grim_savage":
-        return "bg-orange-900/50 text-orange-300 border-orange-700/50";
-      case "neutral_narrative":
+      case "thoughtful":
+        return "bg-cyan-900/50 text-cyan-300 border-cyan-700/50";
+      case "neutral":
       default:
         return "bg-slate-700/50 text-slate-300 border-slate-600";
+    }
+  };
+
+  const getWeightBadge = (weight: string) => {
+    switch (weight) {
+      case "high":
+        return "bg-red-900/40 text-red-300 border-red-700/50";
+      case "medium":
+        return "bg-yellow-900/40 text-yellow-300 border-yellow-700/50";
+      case "low":
+      default:
+        return "bg-slate-800/40 text-slate-400 border-slate-700/50";
     }
   };
 
@@ -210,9 +227,14 @@ export default function Home() {
                     <div className={`w-[calc(100%-4rem)] md:w-[calc(50%-3rem)] p-5 rounded-2xl border transition-all duration-300 backdrop-blur-sm relative group-hover:-translate-y-1 ${getMoodStyles(chunk.mood)}`}>
                       <div className="flex flex-col h-full gap-4">
                         <div className="flex items-start justify-between gap-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border ${getMoodBadge(chunk.mood)} uppercase tracking-wider`}>
-                            {chunk.mood}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border ${getMoodBadge(chunk.mood)} uppercase tracking-wider`}>
+                              {chunk.mood}
+                            </span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold border ${getWeightBadge(chunk.weight)} uppercase tracking-widest`}>
+                              {chunk.weight}
+                            </span>
+                          </div>
                           <button
                             onClick={() => handlePlayAudio(chunk.audio_url)}
                             className={`p-2 rounded-full transition-all shrink-0 border ${
@@ -230,7 +252,7 @@ export default function Home() {
                           </button>
                         </div>
                         <p className="text-base leading-relaxed opacity-90 text-pretty">
-                          {chunk.original_text}
+                          {chunk.text}
                         </p>
                       </div>
                     </div>

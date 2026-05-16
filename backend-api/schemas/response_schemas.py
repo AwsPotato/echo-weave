@@ -2,8 +2,9 @@ from pydantic import BaseModel
 from typing import List
 
 class ProcessTextChunk(BaseModel):
-    original_text: str
+    text: str
     mood: str
+    weight: str
     audio_url: str
 
 class ProcessTextResponse(BaseModel):
