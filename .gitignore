@@ -12,6 +12,7 @@ __pycache__/
 venv/
 ENV/
 .env
+audio_cache
 
 # OS files
 .DS_Store

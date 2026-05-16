@@ -81,11 +81,17 @@ export default function Home() {
 
   const getMoodStyles = (mood: string) => {
     switch (mood) {
-      case "suspense":
+      case "ominous_suspense":
         return "border-indigo-500/50 bg-indigo-950/20 text-indigo-100 shadow-[0_0_15px_rgba(99,102,241,0.1)] hover:border-indigo-400";
-      case "action":
+      case "high_action":
         return "border-rose-500/50 bg-rose-950/20 text-rose-100 shadow-[0_0_15px_rgba(244,63,94,0.1)] hover:border-rose-400";
-      case "neutral":
+      case "analytical_inner":
+        return "border-cyan-500/50 bg-cyan-950/20 text-cyan-100 shadow-[0_0_15px_rgba(6,182,212,0.1)] hover:border-cyan-400";
+      case "awe_astonishment":
+        return "border-amber-500/50 bg-amber-950/20 text-amber-100 shadow-[0_0_15px_rgba(245,158,11,0.1)] hover:border-amber-400";
+      case "grim_savage":
+        return "border-orange-700/50 bg-orange-950/30 text-orange-100 shadow-[0_0_15px_rgba(194,65,12,0.1)] hover:border-orange-500";
+      case "neutral_narrative":
       default:
         return "border-slate-700 bg-slate-800/50 text-slate-200 hover:border-slate-500";
     }
@@ -93,11 +99,17 @@ export default function Home() {
 
   const getMoodBadge = (mood: string) => {
     switch (mood) {
-      case "suspense":
+      case "ominous_suspense":
         return "bg-indigo-900/50 text-indigo-300 border-indigo-700/50";
-      case "action":
+      case "high_action":
         return "bg-rose-900/50 text-rose-300 border-rose-700/50";
-      case "neutral":
+      case "analytical_inner":
+        return "bg-cyan-900/50 text-cyan-300 border-cyan-700/50";
+      case "awe_astonishment":
+        return "bg-amber-900/50 text-amber-300 border-amber-700/50";
+      case "grim_savage":
+        return "bg-orange-900/50 text-orange-300 border-orange-700/50";
+      case "neutral_narrative":
       default:
         return "bg-slate-700/50 text-slate-300 border-slate-600";
     }
