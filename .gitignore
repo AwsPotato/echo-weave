@@ -1,0 +1,18 @@
+# Node/Next.js dependencies and builds
+node_modules/
+.next/
+out/
+build/
+
+# Python dependencies and caching
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
