@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from schemas.request_schemas import ProcessTextRequest
-from schemas.response_schemas import ProcessTextResponse, ProcessTextChunk
+from schemas.response_schemas import ProcessTextResponse, ProcessTextChunk, WordTiming
 from services.text_processor import split_text_into_chunks
 from services.nlp_engine import detect_mood
 from services.tts_engine import generate_audio
@@ -48,10 +48,10 @@ async def process_text(request: ProcessTextRequest) -> ProcessTextResponse:
     start = time.perf_counter()
     
     tasks = [generate_audio(text, mood, weight) for text, mood, weight in chunk_analysis]
-    audio_urls: list[str] = await asyncio.gather(*tasks)
+    results: list[tuple[str, list[dict]]] = await asyncio.gather(*tasks)
     
     elapsed = time.perf_counter() - start
-    logger.info(f"Generated {len(audio_urls)} audio chunks in {elapsed:.2f} seconds")
+    logger.info(f"Generated {len(results)} audio chunks in {elapsed:.2f} seconds")
     
     # Phase 3: Assemble ordered response
     result_chunks = [
@@ -59,9 +59,10 @@ async def process_text(request: ProcessTextRequest) -> ProcessTextResponse:
             text=text,
             mood=mood,
             weight=weight,
-            audio_url=audio_url
+            audio_url=audio_url,
+            word_timings=[WordTiming(**wt) for wt in word_timings]
         )
-        for (text, mood, weight), audio_url in zip(chunk_analysis, audio_urls)
+        for (text, mood, weight), (audio_url, word_timings) in zip(chunk_analysis, results)
     ]
         
     return ProcessTextResponse(chunks=result_chunks)

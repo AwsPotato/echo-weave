@@ -1,13 +1,20 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Loader2, Play, Pause, Square, AudioLines, Sparkles } from "lucide-react";
+import { Loader2, Play, Pause, Square, AudioLines, Sparkles, Crosshair } from "lucide-react";
+
+interface WordTiming {
+  word: string;
+  offset: number;
+  duration: number;
+}
 
 interface ProcessTextChunk {
   text: string;
   mood: string;
   weight: string;
   audio_url: string;
+  word_timings: WordTiming[];
 }
 
 interface ProcessTextResponse {
@@ -32,6 +39,15 @@ export default function Home() {
   const [currentChunkIndex, setCurrentChunkIndex] = useState<number>(-1);
   const isPlayingAllRef = useRef(false);
 
+  // Word highlight state
+  const [activeWordIndex, setActiveWordIndex] = useState<number>(-1);
+  const animFrameRef = useRef<number | null>(null);
+
+  // Auto-scroll setting
+  const [autoScroll, setAutoScroll] = useState(false);
+  const activeWordRef = useRef<HTMLSpanElement | null>(null);
+  const activeCardRef = useRef<HTMLDivElement | null>(null);
+
   // Apply playback speed whenever it changes
   useEffect(() => {
     if (audioRef.current) {
@@ -46,8 +62,65 @@ export default function Home() {
         audioRef.current.pause();
         audioRef.current.src = "";
       }
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
     };
   }, []);
+
+  // Auto-scroll to active word or card
+  useEffect(() => {
+    if (!autoScroll) return;
+    if (activeWordRef.current) {
+      activeWordRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (activeCardRef.current) {
+      activeCardRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [activeWordIndex, currentChunkIndex, autoScroll]);
+
+  // Word tracking via requestAnimationFrame for smooth highlights
+  useEffect(() => {
+    const trackWords = () => {
+      const audio = audioRef.current;
+      if (!audio || audio.paused || !playingUrl) {
+        animFrameRef.current = requestAnimationFrame(trackWords);
+        return;
+      }
+
+      const currentTime = audio.currentTime;
+      const playingChunk = chunks.find(c => c.audio_url === playingUrl);
+
+      if (!playingChunk || playingChunk.word_timings.length === 0) {
+        setActiveWordIndex(-1);
+        animFrameRef.current = requestAnimationFrame(trackWords);
+        return;
+      }
+
+      const timings = playingChunk.word_timings;
+      let wordIdx = -1;
+      for (let i = timings.length - 1; i >= 0; i--) {
+        if (currentTime >= timings[i].offset) {
+          wordIdx = i;
+          break;
+        }
+      }
+
+      setActiveWordIndex(wordIdx);
+      animFrameRef.current = requestAnimationFrame(trackWords);
+    };
+
+    animFrameRef.current = requestAnimationFrame(trackWords);
+    return () => {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
+    };
+  }, [playingUrl, chunks]);
+
+  // Reset active word when playingUrl changes
+  useEffect(() => {
+    setActiveWordIndex(-1);
+  }, [playingUrl]);
 
   // Sequential playback: when a chunk finishes, advance to next
   const handleAudioEnded = useCallback(() => {
@@ -63,7 +136,6 @@ export default function Home() {
           audioRef.current.play().catch(e => console.error("Playback failed", e));
         }
       } else {
-        // Finished all chunks
         stopPlayAll();
       }
     } else {
@@ -110,29 +182,12 @@ export default function Home() {
     }
   };
 
-  const handlePlayAudio = (url: string) => {
-    // If play-all is running, stop it first
-    if (isPlayingAll) stopPlayAll();
+  // Play from a specific chunk index and continue sequentially
+  const playFromChunk = (startIndex: number) => {
+    if (chunks.length === 0 || !audioRef.current || startIndex < 0 || startIndex >= chunks.length) return;
 
-    if (!audioRef.current) return;
-    
-    if (playingUrl === url && !audioRef.current.paused) {
-      audioRef.current.pause();
-      setPlayingUrl(null);
-      return;
-    }
-
-    audioRef.current.src = url;
-    audioRef.current.playbackRate = playbackSpeed;
-    audioRef.current.play().catch(e => console.error("Playback failed", e));
-    setPlayingUrl(url);
-  };
-
-  const handlePlayAll = () => {
-    if (chunks.length === 0 || !audioRef.current) return;
-
-    if (isPlayingAll) {
-      // Pause/resume
+    // If already playing the same chunk, toggle pause/resume
+    if (isPlayingAll && currentChunkIndex === startIndex && playingUrl === chunks[startIndex].audio_url) {
       if (audioRef.current.paused) {
         audioRef.current.play().catch(e => console.error("Playback failed", e));
       } else {
@@ -141,16 +196,30 @@ export default function Home() {
       return;
     }
 
-    // Start from the beginning
     isPlayingAllRef.current = true;
     setIsPlayingAll(true);
-    setCurrentChunkIndex(0);
+    setCurrentChunkIndex(startIndex);
 
-    const firstChunk = chunks[0];
-    setPlayingUrl(firstChunk.audio_url);
-    audioRef.current.src = firstChunk.audio_url;
+    const chunk = chunks[startIndex];
+    setPlayingUrl(chunk.audio_url);
+    audioRef.current.src = chunk.audio_url;
     audioRef.current.playbackRate = playbackSpeed;
     audioRef.current.play().catch(e => console.error("Playback failed", e));
+  };
+
+  const handlePlayAll = () => {
+    if (chunks.length === 0 || !audioRef.current) return;
+
+    if (isPlayingAll) {
+      if (audioRef.current.paused) {
+        audioRef.current.play().catch(e => console.error("Playback failed", e));
+      } else {
+        audioRef.current.pause();
+      }
+      return;
+    }
+
+    playFromChunk(0);
   };
 
   const stopPlayAll = () => {
@@ -158,6 +227,7 @@ export default function Home() {
     setIsPlayingAll(false);
     setCurrentChunkIndex(-1);
     setPlayingUrl(null);
+    setActiveWordIndex(-1);
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = "";
@@ -214,6 +284,38 @@ export default function Home() {
       default:
         return "bg-slate-800/40 text-slate-400 border-slate-700/50";
     }
+  };
+
+  const renderChunkText = (chunk: ProcessTextChunk) => {
+    const isActiveChunk = playingUrl === chunk.audio_url;
+
+    if (!isActiveChunk || chunk.word_timings.length === 0) {
+      return (
+        <p className="text-base leading-relaxed opacity-90 text-pretty">
+          {chunk.text}
+        </p>
+      );
+    }
+
+    return (
+      <p className="text-base leading-relaxed text-pretty">
+        {chunk.word_timings.map((wt, i) => (
+          <span
+            key={i}
+            ref={i === activeWordIndex ? activeWordRef : undefined}
+            className={`transition-all duration-150 rounded-sm ${
+              i === activeWordIndex
+                ? "bg-indigo-500/40 text-white px-0.5 -mx-0.5 py-0.5"
+                : i < activeWordIndex
+                ? "opacity-60"
+                : "opacity-90"
+            }`}
+          >
+            {wt.word}{" "}
+          </span>
+        ))}
+      </p>
+    );
   };
 
   return (
@@ -300,6 +402,20 @@ export default function Home() {
               </div>
 
               <div className="flex items-center gap-3">
+                {/* Auto-scroll toggle */}
+                <button
+                  onClick={() => setAutoScroll(!autoScroll)}
+                  title={autoScroll ? "Auto-scroll ON" : "Auto-scroll OFF"}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border ${
+                    autoScroll
+                      ? "bg-indigo-600/20 text-indigo-300 border-indigo-700/50"
+                      : "bg-slate-900/80 text-slate-500 border-slate-800 hover:text-slate-300"
+                  }`}
+                >
+                  <Crosshair className="w-3.5 h-3.5" />
+                  Follow
+                </button>
+
                 {/* Speed Selector */}
                 <div className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-1.5">
                   <span className="text-xs text-slate-500 font-medium mr-1">Speed</span>
@@ -363,17 +479,24 @@ export default function Home() {
                 const isCurrentInPlayAll = isPlayingAll && currentChunkIndex === index;
                 return (
                   <div key={index} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                    {/* Timeline Dot */}
-                    <div className={`flex items-center justify-center w-12 h-12 rounded-full border-4 border-slate-950 z-10 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm text-sm font-bold transition-all ${
-                      isCurrentInPlayAll
-                        ? "bg-indigo-600 text-white border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.3)]"
-                        : "bg-slate-800 text-slate-500"
-                    }`}>
+                    {/* Timeline Dot — click to play from this chunk */}
+                    <button
+                      onClick={() => playFromChunk(index)}
+                      className={`flex items-center justify-center w-12 h-12 rounded-full border-4 border-slate-950 z-10 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm text-sm font-bold transition-all cursor-pointer hover:scale-110 ${
+                        isCurrentInPlayAll
+                          ? "bg-indigo-600 text-white border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.3)]"
+                          : "bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-white"
+                      }`}
+                      aria-label={`Play from chunk ${index + 1}`}
+                    >
                       {index + 1}
-                    </div>
+                    </button>
                     
                     {/* Card */}
-                    <div className={`w-[calc(100%-4rem)] md:w-[calc(50%-3rem)] p-5 rounded-2xl border transition-all duration-300 backdrop-blur-sm relative group-hover:-translate-y-1 ${getMoodStyles(chunk.mood)} ${isCurrentInPlayAll ? "ring-2 ring-indigo-500/40" : ""}`}>
+                    <div
+                      ref={isCurrentInPlayAll ? activeCardRef : undefined}
+                      className={`w-[calc(100%-4rem)] md:w-[calc(50%-3rem)] p-5 rounded-2xl border transition-all duration-300 backdrop-blur-sm relative group-hover:-translate-y-1 ${getMoodStyles(chunk.mood)} ${isCurrentInPlayAll ? "ring-2 ring-indigo-500/40" : ""}`}
+                    >
                       <div className="flex flex-col h-full gap-4">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-center gap-2">
@@ -385,13 +508,13 @@ export default function Home() {
                             </span>
                           </div>
                           <button
-                            onClick={() => handlePlayAudio(chunk.audio_url)}
+                            onClick={() => playFromChunk(index)}
                             className={`p-2 rounded-full transition-all shrink-0 border ${
                               isPlaying 
                                 ? "bg-indigo-500 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.4)]" 
                                 : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
                             }`}
-                            aria-label="Play audio"
+                            aria-label="Play from here"
                           >
                             {isPlaying ? (
                               <Pause className="w-4 h-4" />
@@ -400,9 +523,7 @@ export default function Home() {
                             )}
                           </button>
                         </div>
-                        <p className="text-base leading-relaxed opacity-90 text-pretty">
-                          {chunk.text}
-                        </p>
+                        {renderChunkText(chunk)}
                       </div>
                     </div>
                   </div>
