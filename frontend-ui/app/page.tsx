@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Loader2, Play, AudioLines, Sparkles } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Loader2, Play, Pause, Square, AudioLines, Sparkles } from "lucide-react";
 
 interface ProcessTextChunk {
   text: string;
@@ -14,15 +14,30 @@ interface ProcessTextResponse {
   chunks: ProcessTextChunk[];
 }
 
+const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
 export default function Home() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [chunks, setChunks] = useState<ProcessTextChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
   
-  // Single audio element ref for playing
+  // Audio state
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingUrl, setPlayingUrl] = useState<string | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
+
+  // Sequential playback state
+  const [isPlayingAll, setIsPlayingAll] = useState(false);
+  const [currentChunkIndex, setCurrentChunkIndex] = useState<number>(-1);
+  const isPlayingAllRef = useRef(false);
+
+  // Apply playback speed whenever it changes
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed]);
 
   // Stop playing when component unmounts
   useEffect(() => {
@@ -34,9 +49,40 @@ export default function Home() {
     };
   }, []);
 
+  // Sequential playback: when a chunk finishes, advance to next
+  const handleAudioEnded = useCallback(() => {
+    if (isPlayingAllRef.current && currentChunkIndex >= 0) {
+      const nextIndex = currentChunkIndex + 1;
+      if (nextIndex < chunks.length) {
+        setCurrentChunkIndex(nextIndex);
+        const nextChunk = chunks[nextIndex];
+        setPlayingUrl(nextChunk.audio_url);
+        if (audioRef.current) {
+          audioRef.current.src = nextChunk.audio_url;
+          audioRef.current.playbackRate = playbackSpeed;
+          audioRef.current.play().catch(e => console.error("Playback failed", e));
+        }
+      } else {
+        // Finished all chunks
+        stopPlayAll();
+      }
+    } else {
+      setPlayingUrl(null);
+    }
+  }, [currentChunkIndex, chunks, playbackSpeed]);
+
+  // Attach the onEnded handler
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.onended = handleAudioEnded;
+    return () => { audio.onended = null; };
+  }, [handleAudioEnded]);
+
   const handleGenerate = async () => {
     if (!text.trim()) return;
     
+    stopPlayAll();
     setLoading(true);
     setError(null);
     setChunks([]);
@@ -65,19 +111,57 @@ export default function Home() {
   };
 
   const handlePlayAudio = (url: string) => {
+    // If play-all is running, stop it first
+    if (isPlayingAll) stopPlayAll();
+
     if (!audioRef.current) return;
     
-    // If playing the same URL, pause it
     if (playingUrl === url && !audioRef.current.paused) {
       audioRef.current.pause();
       setPlayingUrl(null);
       return;
     }
 
-    // Otherwise load and play the new URL
     audioRef.current.src = url;
+    audioRef.current.playbackRate = playbackSpeed;
     audioRef.current.play().catch(e => console.error("Playback failed", e));
     setPlayingUrl(url);
+  };
+
+  const handlePlayAll = () => {
+    if (chunks.length === 0 || !audioRef.current) return;
+
+    if (isPlayingAll) {
+      // Pause/resume
+      if (audioRef.current.paused) {
+        audioRef.current.play().catch(e => console.error("Playback failed", e));
+      } else {
+        audioRef.current.pause();
+      }
+      return;
+    }
+
+    // Start from the beginning
+    isPlayingAllRef.current = true;
+    setIsPlayingAll(true);
+    setCurrentChunkIndex(0);
+
+    const firstChunk = chunks[0];
+    setPlayingUrl(firstChunk.audio_url);
+    audioRef.current.src = firstChunk.audio_url;
+    audioRef.current.playbackRate = playbackSpeed;
+    audioRef.current.play().catch(e => console.error("Playback failed", e));
+  };
+
+  const stopPlayAll = () => {
+    isPlayingAllRef.current = false;
+    setIsPlayingAll(false);
+    setCurrentChunkIndex(-1);
+    setPlayingUrl(null);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
   };
 
   const getMoodStyles = (mood: string) => {
@@ -134,7 +218,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12 font-sans selection:bg-indigo-500/30">
-      <audio ref={audioRef} onEnded={() => setPlayingUrl(null)} />
+      <audio ref={audioRef} />
       
       <div className="max-w-4xl mx-auto space-y-12">
         {/* Header */}
@@ -205,26 +289,91 @@ export default function Home() {
         {/* Timeline Section */}
         {chunks.length > 0 && (
           <section className="space-y-6 pt-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <div className="flex items-center gap-4 px-2">
-              <h2 className="text-2xl font-bold text-white tracking-tight">Timeline</h2>
-              <div className="h-px bg-slate-800 flex-1" />
-              <span className="text-sm text-slate-500 font-medium px-3 py-1 bg-slate-900 rounded-full border border-slate-800">
-                {chunks.length} chunks generated
-              </span>
+            {/* Playback Controls Bar */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-2">
+              <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-bold text-white tracking-tight">Timeline</h2>
+                <div className="h-px bg-slate-800 w-8" />
+                <span className="text-sm text-slate-500 font-medium px-3 py-1 bg-slate-900 rounded-full border border-slate-800">
+                  {chunks.length} chunks
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Speed Selector */}
+                <div className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-1.5">
+                  <span className="text-xs text-slate-500 font-medium mr-1">Speed</span>
+                  {SPEED_OPTIONS.map((speed) => (
+                    <button
+                      key={speed}
+                      onClick={() => setPlaybackSpeed(speed)}
+                      className={`px-2 py-0.5 rounded-lg text-xs font-semibold transition-all ${
+                        playbackSpeed === speed
+                          ? "bg-indigo-600 text-white shadow-sm"
+                          : "text-slate-400 hover:text-white hover:bg-slate-800"
+                      }`}
+                    >
+                      {speed}x
+                    </button>
+                  ))}
+                </div>
+
+                {/* Play All / Stop */}
+                <button
+                  onClick={isPlayingAll ? stopPlayAll : handlePlayAll}
+                  className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium transition-all border ${
+                    isPlayingAll
+                      ? "bg-rose-600/20 text-rose-300 border-rose-700/50 hover:bg-rose-600/30"
+                      : "bg-emerald-600/20 text-emerald-300 border-emerald-700/50 hover:bg-emerald-600/30"
+                  }`}
+                >
+                  {isPlayingAll ? (
+                    <>
+                      <Square className="w-4 h-4" />
+                      Stop
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Play All
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
+
+            {/* Progress indicator during play-all */}
+            {isPlayingAll && currentChunkIndex >= 0 && (
+              <div className="px-2">
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${((currentChunkIndex + 1) / chunks.length) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1.5">
+                  Playing chunk {currentChunkIndex + 1} of {chunks.length}
+                </p>
+              </div>
+            )}
 
             <div className="space-y-4 relative before:absolute before:inset-0 before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-800 before:to-transparent">
               {chunks.map((chunk, index) => {
                 const isPlaying = playingUrl === chunk.audio_url;
+                const isCurrentInPlayAll = isPlayingAll && currentChunkIndex === index;
                 return (
                   <div key={index} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
                     {/* Timeline Dot */}
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full border-4 border-slate-950 bg-slate-800 z-10 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm text-slate-500 text-sm font-bold">
+                    <div className={`flex items-center justify-center w-12 h-12 rounded-full border-4 border-slate-950 z-10 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm text-sm font-bold transition-all ${
+                      isCurrentInPlayAll
+                        ? "bg-indigo-600 text-white border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.3)]"
+                        : "bg-slate-800 text-slate-500"
+                    }`}>
                       {index + 1}
                     </div>
                     
                     {/* Card */}
-                    <div className={`w-[calc(100%-4rem)] md:w-[calc(50%-3rem)] p-5 rounded-2xl border transition-all duration-300 backdrop-blur-sm relative group-hover:-translate-y-1 ${getMoodStyles(chunk.mood)}`}>
+                    <div className={`w-[calc(100%-4rem)] md:w-[calc(50%-3rem)] p-5 rounded-2xl border transition-all duration-300 backdrop-blur-sm relative group-hover:-translate-y-1 ${getMoodStyles(chunk.mood)} ${isCurrentInPlayAll ? "ring-2 ring-indigo-500/40" : ""}`}>
                       <div className="flex flex-col h-full gap-4">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-center gap-2">
@@ -245,7 +394,7 @@ export default function Home() {
                             aria-label="Play audio"
                           >
                             {isPlaying ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <Pause className="w-4 h-4" />
                             ) : (
                               <Play className="w-4 h-4 ml-0.5" />
                             )}
