@@ -17,3 +17,7 @@ class ProcessTextChunk(BaseModel):
 
 class ProcessTextResponse(BaseModel):
     chunks: List[ProcessTextChunk]
+
+class NovelfireResponse(BaseModel):
+    title: str
+    content: str

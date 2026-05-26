@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Loader2, Play, Pause, Square, AudioLines, Sparkles, Crosshair } from "lucide-react";
+import { Loader2, Play, Pause, Square, AudioLines, Sparkles, Crosshair, Download } from "lucide-react";
 
 interface WordTiming {
   word: string;
@@ -25,6 +25,8 @@ const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 export default function Home() {
   const [text, setText] = useState("");
+  const [novelUrl, setNovelUrl] = useState("");
+  const [fetchingChapter, setFetchingChapter] = useState(false);
   const [loading, setLoading] = useState(false);
   const [chunks, setChunks] = useState<ProcessTextChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -179,6 +181,26 @@ export default function Home() {
       setError(err.message || "Failed to process text.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFetchChapter = async () => {
+    if (!novelUrl.trim()) return;
+    setFetchingChapter(true);
+    setError(null);
+    try {
+      const res = await fetch(`http://localhost:8000/api/novelfire/chapter?url=${encodeURIComponent(novelUrl)}`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || "Failed to fetch chapter");
+      }
+      const data = await res.json();
+      setText(`${data.title}\n\n${data.content}`);
+      setNovelUrl("");
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch chapter.");
+    } finally {
+      setFetchingChapter(false);
     }
   };
 
@@ -340,17 +362,41 @@ export default function Home() {
         {/* Input Section */}
         <section className="space-y-6 bg-slate-900/30 p-1 rounded-3xl border border-slate-800/50 backdrop-blur-sm">
           <div className="p-6 md:p-8 space-y-6">
-            <div className="space-y-2">
-              <label htmlFor="script" className="block text-sm font-medium text-slate-400 ml-1">
-                Story Script or Chapter
-              </label>
-              <textarea
-                id="script"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Paste your story here... The system will chunk it and adapt the voice to the context."
-                className="w-full h-64 p-5 bg-slate-900/80 border border-slate-800 rounded-2xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none text-slate-200 placeholder:text-slate-600 text-lg leading-relaxed shadow-inner"
-              />
+            <div className="space-y-4">
+              <div className="flex flex-col md:flex-row gap-3">
+                <input
+                  type="text"
+                  value={novelUrl}
+                  onChange={(e) => setNovelUrl(e.target.value)}
+                  placeholder="Optional: Paste a Novelfire chapter URL to extract text"
+                  className="flex-1 px-4 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all text-slate-200 placeholder:text-slate-600 text-sm"
+                />
+                <button
+                  onClick={handleFetchChapter}
+                  disabled={fetchingChapter || !novelUrl.trim()}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all border border-slate-700 hover:border-slate-600 disabled:opacity-50 font-medium text-sm shrink-0 shadow-sm"
+                >
+                  {fetchingChapter ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4 text-indigo-400" />
+                  )}
+                  {fetchingChapter ? "Extracting..." : "Extract Chapter"}
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="script" className="block text-sm font-medium text-slate-400 ml-1">
+                  Story Script or Chapter
+                </label>
+                <textarea
+                  id="script"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Paste your story here... The system will chunk it and adapt the voice to the context."
+                  className="w-full h-64 p-5 bg-slate-900/80 border border-slate-800 rounded-2xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none text-slate-200 placeholder:text-slate-600 text-lg leading-relaxed shadow-inner"
+                />
+              </div>
             </div>
 
             <div className="flex items-center justify-between">
